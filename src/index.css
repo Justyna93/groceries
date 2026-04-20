@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-surface-50 text-ink-900 font-sans antialiased;
+  }
+  .dark body {
+    @apply bg-night-bg text-night-text;
+  }
+  /* Max width for mobile feel on desktop */
+  #root {
+    @apply mx-auto max-w-[480px];
+  }
+  /* Hide the native outline but keep accessibility via ring utility */
+  :focus { outline: none; }
+  :focus-visible {
+    @apply ring-2 ring-accent-500/40 rounded-md;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-2xl shadow-card border border-surface-200;
+  }
+  .dark .card {
+    @apply bg-night-card border-night-edge shadow-none;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full bg-surface-100 px-2.5 py-1 text-xs text-ink-700;
+  }
+  .dark .pill {
+    @apply bg-night-edge text-night-sub;
+  }
+  .editable {
+    @apply bg-transparent border border-transparent rounded-md px-1 -mx-1 hover:border-surface-200 focus:border-accent-500/40 focus:bg-white transition-colors;
+  }
+  .dark .editable {
+    @apply hover:border-night-edge focus:bg-night-deep;
+  }
+}
