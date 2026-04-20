@@ -61,12 +61,21 @@ export function ListBlock({ list, onChange, onDelete }: Props) {
   const hiddenCount = Math.max(0, list.items.length - COLLAPSED_LIMIT)
   const visibleItems = expanded ? list.items : list.items.slice(0, COLLAPSED_LIMIT)
 
-  // Pretty date like "Apr 20"
+  // Pretty date: "Today", "Tomorrow", or "DD mmm"
   const prettyDate = (() => {
     try {
-      return new Date(list.date).toLocaleDateString(undefined, {
+      const d = new Date(list.date)
+      if (Number.isNaN(d.getTime())) return list.date
+      const startOfDay = (x: Date) =>
+        new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+      const target = startOfDay(d)
+      const today = startOfDay(new Date())
+      const dayMs = 24 * 60 * 60 * 1000
+      if (target === today) return 'Today'
+      if (target === today + dayMs) return 'Tomorrow'
+      return d.toLocaleDateString('en-GB', {
+        day: '2-digit',
         month: 'short',
-        day: 'numeric',
       })
     } catch {
       return list.date
@@ -84,15 +93,17 @@ export function ListBlock({ list, onChange, onDelete }: Props) {
           className="font-semibold text-[17px] text-ink-900 dark:text-night-text truncate"
         />
         <div className="flex items-center gap-0.5 shrink-0">
-          <input
-            type="date"
-            value={list.date}
-            onChange={(e) => update({ date: e.target.value })}
-            className="text-xs text-ink-500 dark:text-night-mute bg-transparent editable cursor-text w-[96px] mr-0.5 dark:[color-scheme:dark]"
-            aria-label="Date"
-          />
-          <span className="hidden text-xs text-ink-500" aria-hidden>
-            {prettyDate}
+          <span className="relative inline-flex items-center mr-0.5">
+            <span className="text-xs text-ink-500 dark:text-night-mute px-1 editable">
+              {prettyDate}
+            </span>
+            <input
+              type="date"
+              value={list.date}
+              onChange={(e) => update({ date: e.target.value })}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer dark:[color-scheme:dark]"
+              aria-label="Date"
+            />
           </span>
           <button
             type="button"
