@@ -1,85 +1,80 @@
-import { useState } from 'react'
 import { TopBar } from './components/TopBar'
 import { AddNewList } from './components/AddNewList'
 import { ListBlock } from './components/ListBlock'
-import { initialLists, initialMembers } from './data'
-import type { GroceryList, Member } from './types'
+import { SignIn } from './components/SignIn'
+import { useGroceryData } from './hooks/useGroceryData'
+import { useSession } from './hooks/useSession'
+import { supabase } from './lib/supabase'
 
 export default function App() {
-  const [members, setMembers] = useState<Member[]>(initialMembers)
-  const [lists, setLists] = useState<GroceryList[]>(initialLists)
+  const session = useSession()
 
-  const addList = () => {
-    const list: GroceryList = {
-      id: crypto.randomUUID(),
-      title: 'New list',
-      date: new Date().toISOString().slice(0, 10),
-      items: [],
-      notes: '',
-      photos: [],
-    }
-    setLists((prev) => [list, ...prev])
+  if (session.status === 'loading') {
+    return (
+      <div className="min-h-full flex items-center justify-center">
+        <p className="text-sm text-ink-500 dark:text-night-mute">Loading…</p>
+      </div>
+    )
   }
 
-  const updateList = (id: string, next: GroceryList) => {
-    setLists((prev) => prev.map((l) => (l.id === id ? next : l)))
+  if (session.status === 'anonymous') {
+    return <SignIn />
   }
 
-  const deleteList = (id: string) => {
-    setLists((prev) => prev.filter((l) => l.id !== id))
-  }
+  return <AuthenticatedApp userId={session.session.user.id} email={session.session.user.email ?? ''} />
+}
 
-  const addMember = (email: string) => {
-    // Derive a placeholder display name & initials from the email local-part
-    // until the invitee accepts and we get their real profile.
-    const local = email.split('@')[0] ?? email
-    const name = local
-      .split(/[._-]/)
-      .filter(Boolean)
-      .map((p) => p[0]!.toUpperCase() + p.slice(1))
-      .join(' ') || email
-    const initials = local.slice(0, 2).toUpperCase()
-    setMembers((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        email,
-        name,
-        initials,
-        online: false,
-        pending: true,
-      },
-    ])
-  }
-
-  const removeMember = (id: string) => {
-    setMembers((prev) => prev.filter((m) => m.id !== id))
-  }
+function AuthenticatedApp({ userId, email }: { userId: string; email: string }) {
+  const data = useGroceryData(userId)
 
   return (
     <div className="min-h-full flex flex-col">
       <TopBar
-        members={members}
-        onAddMember={addMember}
-        onRemoveMember={removeMember}
+        members={data.members}
+        currentEmail={email}
+        onAddMember={data.addMember}
+        onRemoveMember={data.removeMember}
       />
 
       <main className="flex-1 px-4 py-4 space-y-3">
-        <AddNewList onAdd={addList} />
-        {lists.map((list) => (
-          <ListBlock
-            key={list.id}
-            list={list}
-            onChange={(next) => updateList(list.id, next)}
-            onDelete={() => deleteList(list.id)}
-          />
-        ))}
-        {lists.length === 0 && (
+        <AddNewList onAdd={data.addList} />
+        {data.loading ? (
           <p className="text-center text-sm text-ink-500 dark:text-night-mute py-8">
-            No lists yet. Tap “Add New List” to start.
+            Loading lists…
           </p>
+        ) : (
+          <>
+            {data.lists.map((list) => (
+              <ListBlock
+                key={list.id}
+                list={list}
+                onUpdateList={(patch) => data.updateList(list.id, patch)}
+                onDeleteList={() => data.deleteList(list.id)}
+                onAddItem={(text) => data.addItem(list.id, text)}
+                onUpdateItem={data.updateItem}
+                onDeleteItem={data.deleteItem}
+                onAddPhoto={(file) => data.addPhoto(list.id, file)}
+                onDeletePhoto={data.deletePhoto}
+              />
+            ))}
+            {data.lists.length === 0 && (
+              <p className="text-center text-sm text-ink-500 dark:text-night-mute py-8">
+                No lists yet. Tap “Add New List” to start.
+              </p>
+            )}
+          </>
         )}
       </main>
+
+      <footer className="px-4 py-3 text-center">
+        <button
+          type="button"
+          onClick={() => supabase.auth.signOut()}
+          className="text-xs text-ink-500 hover:underline dark:text-night-mute"
+        >
+          Sign out ({email})
+        </button>
+      </footer>
     </div>
   )
 }
