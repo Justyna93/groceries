@@ -5,57 +5,43 @@ import { CameraIcon, NoteIcon, PlusIcon, TrashIcon, XIcon } from './Icons'
 
 type Props = {
   list: GroceryList
-  onChange: (next: GroceryList) => void
-  onDelete: () => void
+  onUpdateList: (patch: { title?: string; date?: string; notes?: string }) => void
+  onDeleteList: () => void
+  onAddItem: (text: string) => void
+  onUpdateItem: (id: string, patch: Partial<BulletItem>) => void
+  onDeleteItem: (id: string) => void
+  onAddPhoto: (file: File) => void
+  onDeletePhoto: (id: string) => void
 }
 
 const COLLAPSED_LIMIT = 5
 
-export function ListBlock({ list, onChange, onDelete }: Props) {
+export function ListBlock({
+  list,
+  onUpdateList,
+  onDeleteList,
+  onAddItem,
+  onUpdateItem,
+  onDeleteItem,
+  onAddPhoto,
+  onDeletePhoto,
+}: Props) {
   const [expanded, setExpanded] = useState(false)
   const [newItem, setNewItem] = useState('')
   const [showNotes, setShowNotes] = useState(list.notes.trim() !== '')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const update = (patch: Partial<GroceryList>) => onChange({ ...list, ...patch })
-
-  const updateItem = (id: string, patch: Partial<BulletItem>) => {
-    update({ items: list.items.map((it) => (it.id === id ? { ...it, ...patch } : it)) })
-  }
-
-  const removeItem = (id: string) => {
-    update({ items: list.items.filter((it) => it.id !== id) })
-  }
-
   const addItem = () => {
     const t = newItem.trim()
     if (!t) return
-    const item: BulletItem = {
-      id: crypto.randomUUID(),
-      text: t,
-      done: false,
-    }
-    update({ items: [...list.items, item] })
+    onAddItem(t)
     setNewItem('')
   }
 
   const onPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
-    Promise.all(
-      files.map(
-        (f) =>
-          new Promise<string>((resolve) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(reader.result as string)
-            reader.readAsDataURL(f)
-          }),
-      ),
-    ).then((urls) => update({ photos: [...list.photos, ...urls] }))
+    files.forEach((f) => onAddPhoto(f))
     e.target.value = ''
-  }
-
-  const removePhoto = (idx: number) => {
-    update({ photos: list.photos.filter((_, i) => i !== idx) })
   }
 
   const hiddenCount = Math.max(0, list.items.length - COLLAPSED_LIMIT)
@@ -88,7 +74,7 @@ export function ListBlock({ list, onChange, onDelete }: Props) {
       <div className="flex items-baseline justify-between gap-3">
         <EditableText
           value={list.title}
-          onChange={(t) => update({ title: t })}
+          onChange={(t) => onUpdateList({ title: t })}
           placeholder="Untitled list"
           className="font-semibold text-[17px] text-ink-900 dark:text-night-text truncate"
         />
@@ -100,7 +86,7 @@ export function ListBlock({ list, onChange, onDelete }: Props) {
             <input
               type="date"
               value={list.date}
-              onChange={(e) => update({ date: e.target.value })}
+              onChange={(e) => onUpdateList({ date: e.target.value })}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer dark:[color-scheme:dark]"
               aria-label="Date"
             />
@@ -124,7 +110,7 @@ export function ListBlock({ list, onChange, onDelete }: Props) {
           />
           <button
             type="button"
-            onClick={onDelete}
+            onClick={onDeleteList}
             className="p-1 rounded-full text-ink-400 hover:text-ink-900 dark:hover:text-night-text hover:bg-surface-100 dark:hover:bg-night-edge"
             aria-label="Delete list"
             title="Delete list"
@@ -137,16 +123,16 @@ export function ListBlock({ list, onChange, onDelete }: Props) {
       {/* Photos */}
       {list.photos.length > 0 && (
         <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
-          {list.photos.map((src, i) => (
-            <div key={i} className="relative shrink-0">
+          {list.photos.map((photo) => (
+            <div key={photo.id} className="relative shrink-0">
               <img
-                src={src}
+                src={photo.url}
                 alt=""
-                className="w-16 h-16 rounded-xl object-cover border border-surface-200 dark:border-night-edge"
+                className="w-16 h-16 rounded-xl object-cover border border-surface-200 dark:border-night-edge bg-surface-100 dark:bg-night-edge"
               />
               <button
                 type="button"
-                onClick={() => removePhoto(i)}
+                onClick={() => onDeletePhoto(photo.id)}
                 className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white dark:bg-night-card border border-surface-200 dark:border-night-edge grid place-items-center text-ink-500 dark:text-night-mute hover:text-ink-900 dark:hover:text-night-text shadow-card"
                 aria-label="Remove photo"
               >
@@ -163,7 +149,7 @@ export function ListBlock({ list, onChange, onDelete }: Props) {
           <li key={item.id} className="group flex items-start gap-2.5">
             <button
               type="button"
-              onClick={() => updateItem(item.id, { done: !item.done })}
+              onClick={() => onUpdateItem(item.id, { done: !item.done })}
               className={`mt-1.5 w-4 h-4 rounded-full border-[1.5px] shrink-0 transition ${
                 item.done
                   ? 'bg-accent-500 border-accent-500'
@@ -173,7 +159,7 @@ export function ListBlock({ list, onChange, onDelete }: Props) {
             />
             <EditableText
               value={item.text}
-              onChange={(t) => updateItem(item.id, { text: t })}
+              onChange={(t) => onUpdateItem(item.id, { text: t })}
               placeholder="Item"
               className={`flex-1 text-[15px] ${
                 item.done
@@ -183,7 +169,7 @@ export function ListBlock({ list, onChange, onDelete }: Props) {
             />
             <button
               type="button"
-              onClick={() => removeItem(item.id)}
+              onClick={() => onDeleteItem(item.id)}
               className="opacity-0 group-hover:opacity-100 text-ink-400 hover:text-ink-900 dark:hover:text-night-text p-1 rounded-md"
               aria-label="Remove item"
             >
@@ -250,7 +236,7 @@ export function ListBlock({ list, onChange, onDelete }: Props) {
             </div>
             <EditableText
               value={list.notes}
-              onChange={(t) => update({ notes: t })}
+              onChange={(t) => onUpdateList({ notes: t })}
               placeholder="Write a note…"
               multiline
               className="text-[14px] text-ink-700 dark:text-night-sub block w-full"

@@ -5,13 +5,29 @@ import { useDarkMode } from '../hooks/useDarkMode'
 
 type Props = {
   members: Member[]
+  currentEmail?: string
   onAddMember: (email: string) => void
   onRemoveMember: (id: string) => void
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export function TopBar({ members, onAddMember, onRemoveMember }: Props) {
+function formatLastSeen(iso?: string | null): string {
+  if (!iso) return 'away'
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return 'away'
+  const diffMs = Date.now() - then
+  const min = Math.floor(diffMs / 60_000)
+  if (min < 1) return 'just now'
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  const day = Math.floor(hr / 24)
+  if (day < 7) return `${day}d ago`
+  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+}
+
+export function TopBar({ members, currentEmail, onAddMember, onRemoveMember }: Props) {
   const [open, setOpen] = useState(false)
   const [newEmail, setNewEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -96,9 +112,13 @@ export function TopBar({ members, onAddMember, onRemoveMember }: Props) {
                   </div>
                 </div>
                 <span className="text-[11px] text-ink-500 dark:text-night-mute shrink-0">
-                  {m.pending ? 'pending' : m.online ? 'viewing' : 'away'}
+                  {m.pending
+                    ? 'pending'
+                    : m.online
+                      ? 'viewing'
+                      : formatLastSeen(m.lastSeenAt)}
                 </span>
-                {m.id !== 'm1' && (
+                {m.email.toLowerCase() !== (currentEmail ?? '').toLowerCase() && (
                   <button
                     type="button"
                     onClick={() => onRemoveMember(m.id)}
