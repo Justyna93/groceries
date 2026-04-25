@@ -48,6 +48,16 @@ function AuthenticatedApp({ userId, email }: { userId: string; email: string }) 
               <ListBlock
                 key={list.id}
                 list={list}
+                viewers={data.viewersByList[list.id] ?? []}
+                editorsByItem={data.editorsByItem}
+                onEditingList={(editing) =>
+                  data.setEditingContext(editing ? { listId: list.id } : null)
+                }
+                onEditingItem={(itemId) =>
+                  data.setEditingContext(
+                    itemId ? { listId: list.id, itemId } : null,
+                  )
+                }
                 onUpdateList={(patch) => data.updateList(list.id, patch)}
                 onDeleteList={() => data.deleteList(list.id)}
                 onAddItem={(text) => data.addItem(list.id, text)}

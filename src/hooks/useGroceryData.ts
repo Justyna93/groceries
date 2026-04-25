@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { Database } from '../lib/database.types'
 import type { GroceryList, Member } from '../types'
+
+type PresenceMeta = { at: number; listId?: string | null; itemId?: string | null }
+export type EditingContext = { listId?: string; itemId?: string } | null
 
 type MemberRow = Database['public']['Tables']['members']['Row']
 type ListRow = Database['public']['Tables']['lists']['Row']
@@ -41,7 +45,8 @@ export function useGroceryData(userId: string) {
   const [itemRows, setItemRows] = useState<ItemRow[]>([])
   const [photoRows, setPhotoRows] = useState<PhotoRow[]>([])
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
-  const [presenceIds, setPresenceIds] = useState<Set<string>>(new Set())
+  const [presenceState, setPresenceState] = useState<Map<string, PresenceMeta>>(new Map())
+  const presenceChannelRef = useRef<RealtimeChannel | null>(null)
 
   // --------------------------------------------------------------------------
   // Initial load
@@ -133,17 +138,36 @@ export function useGroceryData(userId: string) {
       config: { presence: { key: userId } },
     })
     channel.on('presence', { event: 'sync' }, () => {
-      setPresenceIds(new Set(Object.keys(channel.presenceState())))
+      const raw = channel.presenceState() as Record<string, PresenceMeta[]>
+      const next = new Map<string, PresenceMeta>()
+      for (const [key, metas] of Object.entries(raw)) {
+        if (!metas.length) continue
+        const latest = metas.reduce((a, b) => (b.at > a.at ? b : a))
+        next.set(key, latest)
+      }
+      setPresenceState(next)
     })
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
+        presenceChannelRef.current = channel
         await channel.track({ at: Date.now() })
       }
     })
     return () => {
+      presenceChannelRef.current = null
       supabase.removeChannel(channel)
     }
   }, [userId])
+
+  const setEditingContext = useCallback((ctx: EditingContext) => {
+    const channel = presenceChannelRef.current
+    if (!channel) return
+    void channel.track({
+      at: Date.now(),
+      listId: ctx?.listId ?? null,
+      itemId: ctx?.itemId ?? null,
+    })
+  }, [])
 
   // --------------------------------------------------------------------------
   // Heartbeat — write members.last_seen_at every 30s + on hide/unload
@@ -231,10 +255,41 @@ export function useGroceryData(userId: string) {
         initials: m.initials,
         pending: m.pending,
         lastSeenAt: m.last_seen_at,
-        online: m.profile_id ? presenceIds.has(m.profile_id) : false,
+        online: m.profile_id ? presenceState.has(m.profile_id) : false,
       })),
-    [members, presenceIds],
+    [members, presenceState],
   )
+
+  const memberByProfileId = useMemo(() => {
+    const m = new Map<string, Member>()
+    for (const row of uiMembers) {
+      const profileId = members.find((r) => r.id === row.id)?.profile_id
+      if (profileId) m.set(profileId, row)
+    }
+    return m
+  }, [uiMembers, members])
+
+  const viewersByList = useMemo(() => {
+    const out: Record<string, Member[]> = {}
+    for (const [profileId, meta] of presenceState) {
+      if (profileId === userId || !meta.listId) continue
+      const member = memberByProfileId.get(profileId)
+      if (!member) continue
+      ;(out[meta.listId] ??= []).push(member)
+    }
+    return out
+  }, [presenceState, memberByProfileId, userId])
+
+  const editorsByItem = useMemo(() => {
+    const out: Record<string, Member[]> = {}
+    for (const [profileId, meta] of presenceState) {
+      if (profileId === userId || !meta.itemId) continue
+      const member = memberByProfileId.get(profileId)
+      if (!member) continue
+      ;(out[meta.itemId] ??= []).push(member)
+    }
+    return out
+  }, [presenceState, memberByProfileId, userId])
 
   // --------------------------------------------------------------------------
   // Mutators
@@ -329,6 +384,9 @@ export function useGroceryData(userId: string) {
     loading,
     lists,
     members: uiMembers,
+    viewersByList,
+    editorsByItem,
+    setEditingContext,
     addList,
     updateList,
     deleteList,
