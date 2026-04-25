@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import type { Member } from '../types'
-import { MoonIcon, PlusIcon, SunIcon, UsersIcon, XIcon } from './Icons'
+import { BellIcon, BellOffIcon, MoonIcon, PlusIcon, SunIcon, UsersIcon, XIcon } from './Icons'
 import { useDarkMode } from '../hooks/useDarkMode'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 
 type Props = {
   members: Member[]
   currentEmail?: string
+  currentUserId: string
   onAddMember: (email: string) => void
   onRemoveMember: (id: string) => void
 }
@@ -27,13 +29,18 @@ function formatLastSeen(iso?: string | null): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 }
 
-export function TopBar({ members, currentEmail, onAddMember, onRemoveMember }: Props) {
+export function TopBar({ members, currentEmail, currentUserId, onAddMember, onRemoveMember }: Props) {
   const [open, setOpen] = useState(false)
   const [newEmail, setNewEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const { isDark, toggle: toggleTheme } = useDarkMode()
+  const push = usePushNotifications(currentUserId)
 
   const online = members.filter((m) => m.online).length
+
+  const pushSupported = push.state !== 'unsupported'
+  const pushOn = push.subscribed && push.state === 'granted'
+  const pushBlocked = push.state === 'denied'
 
   const submit = () => {
     const e = newEmail.trim().toLowerCase()
@@ -57,6 +64,35 @@ export function TopBar({ members, currentEmail, onAddMember, onRemoveMember }: P
         <h1 className="text-[15px] font-semibold tracking-tight">Groceries</h1>
 
         <div className="flex items-center gap-2">
+          {pushSupported && (
+            <button
+              type="button"
+              onClick={() => (pushOn ? push.disable() : push.enable())}
+              disabled={pushBlocked || push.state === 'subscribing'}
+              className="p-1.5 rounded-full bg-white dark:bg-night-card border border-surface-200 dark:border-night-edge text-ink-700 dark:text-night-sub hover:bg-surface-100 dark:hover:bg-surface-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label={
+                pushBlocked
+                  ? 'Notifications blocked in browser settings'
+                  : pushOn
+                    ? 'Disable shopping-day notifications'
+                    : 'Enable shopping-day notifications'
+              }
+              title={
+                pushBlocked
+                  ? 'Notifications blocked — re-enable in your browser settings'
+                  : pushOn
+                    ? 'Notifications on'
+                    : 'Enable notifications'
+              }
+            >
+              {pushOn ? (
+                <BellIcon className="w-[18px] h-[18px]" />
+              ) : (
+                <BellOffIcon className="w-[18px] h-[18px]" />
+              )}
+            </button>
+          )}
+
           <button
             type="button"
             onClick={toggleTheme}

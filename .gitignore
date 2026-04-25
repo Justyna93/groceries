@@ -25,3 +25,6 @@ dist-ssr
 
 # Claude Code local settings (per-user permission prefs)
 .claude/settings.local.json
+
+# Supabase CLI local state (project ref, version cache, etc.)
+supabase/.temp/
