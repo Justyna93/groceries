@@ -1,10 +1,14 @@
 import { useRef, useState } from 'react'
-import type { GroceryList, BulletItem } from '../types'
+import type { GroceryList, BulletItem, Member } from '../types'
 import { EditableText } from './EditableText'
 import { CameraIcon, NoteIcon, PlusIcon, TrashIcon, XIcon } from './Icons'
 
 type Props = {
   list: GroceryList
+  viewers?: Member[]
+  editorsByItem?: Record<string, Member[]>
+  onEditingItem?: (itemId: string | null) => void
+  onEditingList?: (editing: boolean) => void
   onUpdateList: (patch: { title?: string; date?: string; notes?: string }) => void
   onDeleteList: () => void
   onAddItem: (text: string) => void
@@ -14,10 +18,38 @@ type Props = {
   onDeletePhoto: (id: string) => void
 }
 
+function Avatar({ member, size = 18 }: { member: Member; size?: number }) {
+  return (
+    <span
+      className="inline-flex items-center justify-center rounded-full bg-accent-500/15 text-accent-700 dark:text-accent-300 ring-2 ring-white dark:ring-night-card font-semibold"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.42) }}
+      title={`${member.name} is editing`}
+      aria-label={`${member.name} is editing`}
+    >
+      {member.initials}
+    </span>
+  )
+}
+
+function AvatarStack({ members, size = 18 }: { members: Member[]; size?: number }) {
+  if (!members.length) return null
+  return (
+    <span className="inline-flex -space-x-1.5">
+      {members.slice(0, 3).map((m) => (
+        <Avatar key={m.id} member={m} size={size} />
+      ))}
+    </span>
+  )
+}
+
 const COLLAPSED_LIMIT = 5
 
 export function ListBlock({
   list,
+  viewers = [],
+  editorsByItem = {},
+  onEditingItem,
+  onEditingList,
   onUpdateList,
   onDeleteList,
   onAddItem,
@@ -72,12 +104,16 @@ export function ListBlock({
     <section className="card p-4 space-y-3">
       {/* Header: title + date on same row */}
       <div className="flex items-baseline justify-between gap-3">
-        <EditableText
-          value={list.title}
-          onChange={(t) => onUpdateList({ title: t })}
-          placeholder="Untitled list"
-          className="font-semibold text-[17px] text-ink-900 dark:text-night-text truncate"
-        />
+        <div className="flex items-center gap-2 min-w-0">
+          <EditableText
+            value={list.title}
+            onChange={(t) => onUpdateList({ title: t })}
+            onEditingChange={(editing) => onEditingList?.(editing)}
+            placeholder="Untitled list"
+            className="font-semibold text-[17px] text-ink-900 dark:text-night-text truncate"
+          />
+          {viewers.length > 0 && <AvatarStack members={viewers} />}
+        </div>
         <div className="flex items-center gap-0.5 shrink-0">
           <span className="relative inline-flex items-center mr-0.5">
             <span className="text-xs text-ink-500 dark:text-night-mute px-1 editable">
@@ -160,6 +196,7 @@ export function ListBlock({
             <EditableText
               value={item.text}
               onChange={(t) => onUpdateItem(item.id, { text: t })}
+              onEditingChange={(editing) => onEditingItem?.(editing ? item.id : null)}
               placeholder="Item"
               className={`flex-1 text-[15px] ${
                 item.done
@@ -167,6 +204,9 @@ export function ListBlock({
                   : 'text-ink-900 dark:text-night-text'
               }`}
             />
+            {editorsByItem[item.id]?.length ? (
+              <AvatarStack members={editorsByItem[item.id]} size={16} />
+            ) : null}
             <button
               type="button"
               onClick={() => onDeleteItem(item.id)}
@@ -184,6 +224,8 @@ export function ListBlock({
           <input
             value={newItem}
             onChange={(e) => setNewItem(e.target.value)}
+            onFocus={() => onEditingList?.(true)}
+            onBlur={() => onEditingList?.(false)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault()
@@ -237,6 +279,7 @@ export function ListBlock({
             <EditableText
               value={list.notes}
               onChange={(t) => onUpdateList({ notes: t })}
+              onEditingChange={(editing) => onEditingList?.(editing)}
               placeholder="Write a note…"
               multiline
               className="text-[14px] text-ink-700 dark:text-night-sub block w-full"

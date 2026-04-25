@@ -8,6 +8,8 @@ type Props = {
   multiline?: boolean
   /** Called when Enter is pressed (only if not multiline). Return false to keep editing. */
   onEnter?: () => void
+  /** Fires when the editing state flips (true on focus, false on commit/cancel). */
+  onEditingChange?: (editing: boolean) => void
 }
 
 /**
@@ -21,6 +23,7 @@ export function EditableText({
   className = '',
   multiline = false,
   onEnter,
+  onEditingChange,
 }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
@@ -35,8 +38,26 @@ export function EditableText({
     }
   }, [editing])
 
-  const commit = () => {
+  // Cleanup: notify parent we stopped editing if unmounted mid-edit.
+  useEffect(() => {
+    return () => {
+      if (editing) onEditingChange?.(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const startEditing = () => {
+    setEditing(true)
+    onEditingChange?.(true)
+  }
+
+  const stopEditing = () => {
     setEditing(false)
+    onEditingChange?.(false)
+  }
+
+  const commit = () => {
+    stopEditing()
     if (draft !== value) onChange(draft)
   }
 
@@ -46,11 +67,11 @@ export function EditableText({
       <span
         role="button"
         tabIndex={0}
-        onClick={() => setEditing(true)}
+        onClick={startEditing}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
-            setEditing(true)
+            startEditing()
           }
         }}
         className={`editable cursor-text inline-block ${empty ? 'text-ink-400' : ''} ${className}`}
@@ -87,7 +108,7 @@ export function EditableText({
           onEnter?.()
         } else if (e.key === 'Escape') {
           setDraft(value)
-          setEditing(false)
+          stopEditing()
         }
       }}
       placeholder={placeholder}
