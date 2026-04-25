@@ -295,7 +295,21 @@ export function useGroceryData(userId: string) {
   // Mutators
   // --------------------------------------------------------------------------
   const addList = useCallback(async () => {
-    await supabase.from('lists').insert({ created_by: userId })
+    const today = new Date().toISOString().slice(0, 10)
+    const { data, error } = await supabase
+      .from('lists')
+      .insert({ created_by: userId })
+      .select('id, date')
+      .single()
+    if (error || !data) return
+    // If the new list's default date is today, fire the shopping-day push now
+    // rather than waiting for the 9am cron. The edge function dedupes via
+    // shopping_day_notifications, so a same-day cron run won't repeat it.
+    if (data.date === today) {
+      void supabase.functions.invoke('send-shopping-reminders', {
+        body: { listId: data.id },
+      })
+    }
   }, [userId])
 
   const updateList = useCallback(

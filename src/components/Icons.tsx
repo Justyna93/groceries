@@ -79,3 +79,19 @@ export const MoonIcon = (props: SVGProps<SVGSVGElement>) => (
     <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
   </svg>
 )
+
+export const BellIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <path d="M6 8a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" />
+    <path d="M10 19a2 2 0 0 0 4 0" />
+  </svg>
+)
+
+export const BellOffIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <path d="M6 8a6 6 0 0 1 9.6-4.8" />
+    <path d="M18 14V8M20 14H4s2-1 2-6" />
+    <path d="M10 19a2 2 0 0 0 4 0" />
+    <path d="M3 3l18 18" />
+  </svg>
+)

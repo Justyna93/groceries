@@ -4,6 +4,7 @@ import { ListBlock } from './components/ListBlock'
 import { SignIn } from './components/SignIn'
 import { useGroceryData } from './hooks/useGroceryData'
 import { useSession } from './hooks/useSession'
+import { useAckFromNotification } from './hooks/useAckFromNotification'
 import { supabase } from './lib/supabase'
 
 export default function App() {
@@ -26,12 +27,14 @@ export default function App() {
 
 function AuthenticatedApp({ userId, email }: { userId: string; email: string }) {
   const data = useGroceryData(userId)
+  useAckFromNotification(userId)
 
   return (
     <div className="min-h-full flex flex-col">
       <TopBar
         members={data.members}
         currentEmail={email}
+        currentUserId={userId}
         onAddMember={data.addMember}
         onRemoveMember={data.removeMember}
       />
