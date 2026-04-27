@@ -295,28 +295,31 @@ export function useGroceryData(userId: string) {
   // Mutators
   // --------------------------------------------------------------------------
   const addList = useCallback(async () => {
-    const today = new Date().toISOString().slice(0, 10)
-    const { data, error } = await supabase
-      .from('lists')
-      .insert({ created_by: userId })
-      .select('id, date')
-      .single()
-    if (error || !data) return
-    // If the new list's default date is today, fire the shopping-day push now
-    // rather than waiting for the 9am cron. The edge function dedupes via
-    // shopping_day_notifications, so a same-day cron run won't repeat it.
-    if (data.date === today) {
-      void supabase.functions.invoke('send-shopping-reminders', {
-        body: { source: 'app' },
-      })
-    }
+    // New lists have no date until the user picks one — that's what gates the
+    // shopping-day notification (fired in updateList when date becomes today).
+    await supabase.from('lists').insert({ created_by: userId })
   }, [userId])
 
   const updateList = useCallback(
-    async (id: string, patch: { title?: string; date?: string; notes?: string }) => {
+    async (
+      id: string,
+      patch: { title?: string; date?: string | null; notes?: string },
+    ) => {
+      const previous = listRows.find((l) => l.id === id)
       await supabase.from('lists').update(patch).eq('id', id)
+      // Fire the shopping-day push only when the date *changes to* today, so
+      // edits to the title or notes on a today-list don't re-trigger it. The
+      // edge function dedupes via shopping_day_notifications.
+      if (patch.date !== undefined) {
+        const today = new Date().toISOString().slice(0, 10)
+        if (patch.date === today && previous?.date !== today) {
+          void supabase.functions.invoke('send-shopping-reminders', {
+            body: { source: 'app' },
+          })
+        }
+      }
     },
-    [],
+    [listRows],
   )
 
   const deleteList = useCallback(async (id: string) => {

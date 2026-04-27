@@ -9,7 +9,7 @@ type Props = {
   editorsByItem?: Record<string, Member[]>
   onEditingItem?: (itemId: string | null) => void
   onEditingList?: (editing: boolean) => void
-  onUpdateList: (patch: { title?: string; date?: string; notes?: string }) => void
+  onUpdateList: (patch: { title?: string; date?: string | null; notes?: string }) => void
   onDeleteList: () => void
   onAddItem: (text: string) => void
   onUpdateItem: (id: string, patch: Partial<BulletItem>) => void
@@ -79,8 +79,9 @@ export function ListBlock({
   const hiddenCount = Math.max(0, list.items.length - COLLAPSED_LIMIT)
   const visibleItems = expanded ? list.items : list.items.slice(0, COLLAPSED_LIMIT)
 
-  // Pretty date: "Today", "Tomorrow", or "DD mmm"
+  // Pretty date: "Today", "Tomorrow", "DD mmm", or "Set date" when not picked.
   const prettyDate = (() => {
+    if (!list.date) return 'Set date'
     try {
       const d = new Date(list.date)
       if (Number.isNaN(d.getTime())) return list.date
@@ -116,13 +117,19 @@ export function ListBlock({
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
           <span className="relative inline-flex items-center mr-0.5">
-            <span className="text-xs text-ink-500 dark:text-night-mute px-1 editable">
+            <span
+              className={`text-xs px-1 editable ${
+                list.date
+                  ? 'text-ink-500 dark:text-night-mute'
+                  : 'text-ink-400 italic'
+              }`}
+            >
               {prettyDate}
             </span>
             <input
               type="date"
-              value={list.date}
-              onChange={(e) => onUpdateList({ date: e.target.value })}
+              value={list.date ?? ''}
+              onChange={(e) => onUpdateList({ date: e.target.value || null })}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer dark:[color-scheme:dark]"
               aria-label="Date"
             />
