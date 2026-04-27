@@ -32,7 +32,7 @@ export type Database = {
         Row: {
           id: string
           title: string
-          date: string
+          date: string | null
           notes: string
           created_by: string | null
           created_at: string
@@ -40,7 +40,7 @@ export type Database = {
         Insert: {
           id?: string
           title?: string
-          date?: string
+          date?: string | null
           notes?: string
           created_by?: string | null
           created_at?: string

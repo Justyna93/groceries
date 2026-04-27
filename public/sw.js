@@ -1,5 +1,5 @@
 // Bump VERSION on deploy to force old caches to be evicted.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = `groceries-${VERSION}`;
 
 // Precached on install so the app shell boots offline on first repeat visit.
@@ -120,19 +120,19 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
   const ids = Array.isArray(data.listIds) ? data.listIds.join(',') : '';
-  // Anything other than dismiss opens the app; the OK action also passes
-  // ?ack=<listIds> so the page can call the ack edge function on load.
-  const url =
-    event.action === 'ack' && ids
-      ? `/?ack=${encodeURIComponent(ids)}`
-      : '/';
+  // iOS PWAs don't reliably fire `event.action` for tappable action buttons,
+  // so we treat *any* click on a shopping-day notification as the ack — the
+  // notification only ever exists to confirm the other person saw it.
+  const isShoppingDay = data.kind === 'shopping-day';
+  const shouldAck = isShoppingDay && ids;
+  const url = shouldAck ? `/?ack=${encodeURIComponent(ids)}` : '/';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       const target = new URL(url, self.location.origin).href;
       for (const client of clients) {
         if ('focus' in client) {
-          if (event.action === 'ack' && ids) {
+          if (shouldAck) {
             client.postMessage({ type: 'ack-list', listIds: data.listIds });
           }
           return client.focus();
