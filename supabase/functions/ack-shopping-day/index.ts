@@ -24,26 +24,28 @@ Deno.serve(async (req) => {
   if (!who.user) return json({ error: 'invalid session' }, 401)
   const userId = who.user.id
 
-  let body: { listId?: string } = {}
+  let body: { listIds?: string[] } = {}
   try {
     body = await req.json()
   } catch {
     return json({ error: 'invalid body' }, 400)
   }
-  if (!body.listId) return json({ error: 'listId required' }, 400)
+  const listIds = (body.listIds ?? []).filter((id) => typeof id === 'string')
+  if (listIds.length === 0) return json({ error: 'listIds required' }, 400)
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { persistSession: false },
   })
 
-  const [listRes, ackerRes, othersRes] = await Promise.all([
-    admin.from('lists').select('id, title').eq('id', body.listId).single(),
+  const [listsRes, ackerRes, othersRes] = await Promise.all([
+    admin.from('lists').select('id, title').in('id', listIds),
     admin.from('members').select('name').eq('profile_id', userId).single(),
     admin.from('push_subscriptions').select('endpoint, p256dh, auth').neq('user_id', userId),
   ])
 
-  if (listRes.error || !listRes.data) return json({ error: 'list not found' }, 404)
+  if (listsRes.error) return json({ error: listsRes.error.message }, 500)
   if (othersRes.error) return json({ error: othersRes.error.message }, 500)
+  if (!listsRes.data?.length) return json({ error: 'lists not found' }, 404)
 
   const ackerName = ackerRes.data?.name ?? 'Someone'
   const subs = (othersRes.data ?? []) as Subscription[]
@@ -51,8 +53,8 @@ Deno.serve(async (req) => {
 
   const dead = await sendToAll(subs, {
     kind: 'ack',
-    listId: listRes.data.id,
-    listTitle: listRes.data.title,
+    listIds: listsRes.data.map((l) => l.id),
+    listTitles: listsRes.data.map((l) => l.title),
     ackerName,
   })
   if (dead.length) {
