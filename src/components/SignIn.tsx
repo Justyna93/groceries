@@ -1,5 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+
+// Supabase Auth → Providers → Email lets the project pick a token length
+// between 6 and 10. We accept any of those lengths so changing the setting
+// later doesn't break the form.
+const MIN_CODE_LEN = 6
+const MAX_CODE_LEN = 10
 
 // Two-step OTP flow: send a 6-digit code to the email, then verify it inline.
 // We don't use the magic-link URL because iOS Mail can't open an installed
@@ -35,6 +41,7 @@ export function SignIn() {
 
   const verify = async (token: string) => {
     if (status.kind !== 'code' && status.kind !== 'error') return
+    if (token.length < MIN_CODE_LEN) return
     const targetEmail = 'email' in status && status.email ? status.email : email
     setStatus({ kind: 'verifying', email: targetEmail })
     const { error } = await supabase.auth.verifyOtp({
@@ -45,20 +52,10 @@ export function SignIn() {
     if (error) {
       setCode('')
       setStatus({ kind: 'error', email: targetEmail, message: error.message })
-      // Refocus so the user can re-type without an extra tap.
       requestAnimationFrame(() => codeInputRef.current?.focus())
     }
-    // On success, onAuthStateChange in useSession swaps to the app — nothing
-    // for this component to do.
+    // On success, onAuthStateChange in useSession swaps to the app.
   }
-
-  // Auto-submit when 6 digits are entered.
-  useEffect(() => {
-    if (code.length === 6 && (status.kind === 'code' || status.kind === 'error')) {
-      void verify(code)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code])
 
   const inEmailStep = status.kind === 'email' || status.kind === 'sending' ||
     (status.kind === 'error' && !status.email)
@@ -72,8 +69,8 @@ export function SignIn() {
           <h1 className="text-lg font-semibold">Groceries</h1>
           <p className="text-sm text-ink-500 dark:text-night-mute mt-1">
             {inCodeStep
-              ? 'Enter the 6-digit code we just emailed you.'
-              : "We'll email you a 6-digit sign-in code."}
+              ? 'Enter the code we just emailed you.'
+              : "We'll email you a sign-in code."}
           </p>
         </div>
 
@@ -120,17 +117,30 @@ export function SignIn() {
               inputMode="numeric"
               autoComplete="one-time-code"
               pattern="[0-9]*"
-              maxLength={6}
+              maxLength={MAX_CODE_LEN}
               autoFocus
-              placeholder="123456"
+              placeholder="12345678"
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={(e) =>
+                setCode(e.target.value.replace(/\D/g, '').slice(0, MAX_CODE_LEN))
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && code.length >= MIN_CODE_LEN) {
+                  e.preventDefault()
+                  void verify(code)
+                }
+              }}
               disabled={status.kind === 'verifying'}
               className="w-full rounded-md border border-surface-200 bg-white px-3 py-3 text-center text-lg font-mono tracking-[0.4em] focus:border-accent-500/40 focus:ring-2 focus:ring-accent-500/40 focus:outline-none dark:border-night-edge dark:bg-night-card disabled:opacity-60"
             />
-            {status.kind === 'verifying' && (
-              <p className="text-sm text-ink-500 dark:text-night-mute">Verifying…</p>
-            )}
+            <button
+              type="button"
+              onClick={() => void verify(code)}
+              disabled={code.length < MIN_CODE_LEN || status.kind === 'verifying'}
+              className="w-full rounded-md bg-accent-500 px-3 py-2 text-sm font-medium text-white hover:bg-accent-600 disabled:opacity-60"
+            >
+              {status.kind === 'verifying' ? 'Verifying…' : 'Verify code'}
+            </button>
             {status.kind === 'error' && (
               <p className="text-sm text-red-600 dark:text-red-400">{status.message}</p>
             )}
