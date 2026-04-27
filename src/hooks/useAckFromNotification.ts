@@ -10,9 +10,10 @@ export function useAckFromNotification(userId: string) {
   useEffect(() => {
     if (!userId) return
 
-    const ack = async (listId: string) => {
+    const ack = async (listIds: string[]) => {
+      if (listIds.length === 0) return
       try {
-        await supabase.functions.invoke('ack-shopping-day', { body: { listId } })
+        await supabase.functions.invoke('ack-shopping-day', { body: { listIds } })
       } catch (err) {
         console.error('ack failed', err)
       }
@@ -23,12 +24,13 @@ export function useAckFromNotification(userId: string) {
     if (queued) {
       url.searchParams.delete('ack')
       window.history.replaceState({}, '', url.toString())
-      void ack(queued)
+      const ids = queued.split(',').map((s) => s.trim()).filter(Boolean)
+      void ack(ids)
     }
 
     const onMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'ack-list' && typeof event.data.listId === 'string') {
-        void ack(event.data.listId)
+      if (event.data?.type === 'ack-list' && Array.isArray(event.data.listIds)) {
+        void ack(event.data.listIds.filter((s: unknown) => typeof s === 'string'))
       }
     }
     navigator.serviceWorker?.addEventListener('message', onMessage)

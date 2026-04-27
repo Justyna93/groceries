@@ -307,7 +307,7 @@ export function useGroceryData(userId: string) {
     // shopping_day_notifications, so a same-day cron run won't repeat it.
     if (data.date === today) {
       void supabase.functions.invoke('send-shopping-reminders', {
-        body: { listId: data.id },
+        body: { source: 'app' },
       })
     }
   }, [userId])

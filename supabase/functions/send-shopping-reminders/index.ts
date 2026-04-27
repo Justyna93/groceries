@@ -1,13 +1,15 @@
-// Pushes the "🧺 Today is a shopping day in <List>" notification.
+// Sends ONE aggregated "🧺 Today is a shopping day" notification listing every
+// list dated today. Subsequent calls during the day re-render the same
+// notification (date-keyed `tag` in the SW), so adding a 2nd list just updates
+// the body to "Open Pharmacy, Bio." instead of stacking a second alert.
 //
 // Triggers:
-//   1. pg_cron at 7am + 8am UTC (covers 9am Warsaw across DST). Idempotent
-//      via the `shopping_day_notifications (list_id, notified_on)` table.
-//   2. The web app, right after creating a list whose date is today, with
-//      body `{ listId }` to skip the date scan.
+//   1. pg_cron at 7am + 8am UTC (covers 9am Warsaw across DST). Skipped if
+//      we already fired one today.
+//   2. The web app, right after creating a list dated today. Body is ignored;
+//      we always re-aggregate from the DB.
 //
-// Auth: requires the service-role key (cron uses Vault; the web app uses
-// the user's JWT). RLS bypassed via the service-role client.
+// Auth: service-role (cron via Vault; web app via the user's JWT).
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { sendToAll, type Subscription } from '../_shared/push.ts'
@@ -19,7 +21,7 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { persistSession: false },
 })
 
-type Body = { listId?: string }
+type Body = { source?: string }
 
 Deno.serve(async (req) => {
   let body: Body = {}
@@ -30,48 +32,55 @@ Deno.serve(async (req) => {
   }
 
   const today = new Date().toISOString().slice(0, 10)
+  const fromCron = body.source === 'cron'
 
-  // Pick the lists to notify on.
-  const listsQuery = body.listId
-    ? admin.from('lists').select('id, title, date').eq('id', body.listId).limit(1)
-    : admin.from('lists').select('id, title, date').eq('date', today)
-  const { data: lists, error: listsErr } = await listsQuery
+  const { data: lists, error: listsErr } = await admin
+    .from('lists')
+    .select('id, title')
+    .eq('date', today)
   if (listsErr) return json({ error: listsErr.message }, 500)
   if (!lists?.length) return json({ skipped: 'no lists today' })
 
-  // Filter out lists already notified today (idempotency for cron).
-  const { data: already } = await admin
-    .from('shopping_day_notifications')
-    .select('list_id')
-    .eq('notified_on', today)
-  const alreadySet = new Set((already ?? []).map((r) => r.list_id))
-  const todo = lists.filter((l) => l.date === today && !alreadySet.has(l.id))
-  if (todo.length === 0) return json({ skipped: 'already notified' })
+  // Cron must not double-fire (7am + 8am UTC); the web-app trigger always
+  // proceeds so a freshly-added list updates the in-tray notification.
+  if (fromCron) {
+    const { count } = await admin
+      .from('shopping_day_notifications')
+      .select('list_id', { count: 'exact', head: true })
+      .eq('notified_on', today)
+    if (count && count > 0) return json({ skipped: 'already notified today' })
+  }
 
-  // Pull every active subscription. With 2 users this is ~2 rows.
   const { data: subs, error: subsErr } = await admin
     .from('push_subscriptions')
     .select('endpoint, p256dh, auth')
   if (subsErr) return json({ error: subsErr.message }, 500)
   const subscriptions = (subs ?? []) as Subscription[]
 
-  const sentFor: string[] = []
-  for (const list of todo) {
-    const dead = await sendToAll(subscriptions, {
-      kind: 'shopping-day',
-      listId: list.id,
-      listTitle: list.title,
-    })
-    if (dead.length) {
-      await admin.from('push_subscriptions').delete().in('endpoint', dead)
-    }
-    await admin
-      .from('shopping_day_notifications')
-      .insert({ list_id: list.id, notified_on: today })
-    sentFor.push(list.id)
+  const dead = await sendToAll(subscriptions, {
+    kind: 'shopping-day',
+    listIds: lists.map((l) => l.id),
+    listTitles: lists.map((l) => l.title),
+  })
+  if (dead.length) {
+    await admin.from('push_subscriptions').delete().in('endpoint', dead)
   }
 
-  return json({ sent: sentFor })
+  // Record dedup rows for any list we haven't recorded yet, so a later cron
+  // run on the same date short-circuits.
+  const { data: already } = await admin
+    .from('shopping_day_notifications')
+    .select('list_id')
+    .eq('notified_on', today)
+  const have = new Set((already ?? []).map((r) => r.list_id))
+  const toInsert = lists.filter((l) => !have.has(l.id))
+  if (toInsert.length) {
+    await admin
+      .from('shopping_day_notifications')
+      .insert(toInsert.map((l) => ({ list_id: l.id, notified_on: today })))
+  }
+
+  return json({ sent: lists.length, listIds: lists.map((l) => l.id) })
 })
 
 function json(payload: unknown, status = 200) {

@@ -1,5 +1,5 @@
 // Bump VERSION on deploy to force old caches to be evicted.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = `groceries-${VERSION}`;
 
 // Precached on install so the app shell boots offline on first repeat visit.
@@ -68,32 +68,48 @@ self.addEventListener('fetch', (event) => {
 // =============================================================================
 // Web Push
 // =============================================================================
-// Payload contract (JSON, sent by the `send-push` edge function):
-//   { kind: 'shopping-day', listId, listTitle }
-//   { kind: 'ack',          listId, listTitle, ackerName }
+// Payload contract (JSON, sent by the edge functions):
+//   { kind: 'shopping-day', listIds: string[], listTitles: string[] }
+//   { kind: 'ack',          listIds: string[], listTitles: string[], ackerName }
+//
+// Multiple lists for the same day are aggregated into one notification, and a
+// date-keyed `tag` makes any later update replace the existing entry rather
+// than stacking a second one.
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function joinTitles(titles) {
+  return (titles || []).filter(Boolean).join(', ') || 'shopping';
+}
 
 self.addEventListener('push', (event) => {
   let payload = {};
   try {
     payload = event.data ? event.data.json() : {};
   } catch {
-    payload = { kind: 'shopping-day', listTitle: '' };
+    payload = {};
   }
 
   const isAck = payload.kind === 'ack';
+  const titles = joinTitles(payload.listTitles);
   const title = isAck
     ? `🧺 ${payload.ackerName || 'Someone'} acknowledged`
     : '🧺 Today is a shopping day';
-  const body = isAck
-    ? `They saw the "${payload.listTitle || 'shopping'}" list.`
-    : `Open the "${payload.listTitle || 'shopping'}" list.`;
+  const body = isAck ? `They saw ${titles}.` : `Open ${titles}.`;
+  const today = todayIsoDate();
 
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
       icon: '/pwa-192x192.png',
       badge: '/pwa-192x192.png',
-      tag: isAck ? `ack-${payload.listId}` : `shopping-${payload.listId}`,
+      tag: isAck ? `ack-${today}` : `shopping-${today}`,
+      // Re-alert when an existing notification is replaced (e.g. a 2nd list
+      // is added during the day). Without this, the browser would silently
+      // swap the body and the user wouldn't notice.
+      renotify: true,
       data: payload,
       actions: isAck ? [] : [{ action: 'ack', title: 'OK' }],
     })
@@ -103,22 +119,21 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
+  const ids = Array.isArray(data.listIds) ? data.listIds.join(',') : '';
   // Anything other than dismiss opens the app; the OK action also passes
-  // ?ack=<listId> so the page can call the ack edge function on load.
+  // ?ack=<listIds> so the page can call the ack edge function on load.
   const url =
-    event.action === 'ack' && data.listId
-      ? `/?ack=${encodeURIComponent(data.listId)}`
+    event.action === 'ack' && ids
+      ? `/?ack=${encodeURIComponent(ids)}`
       : '/';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       const target = new URL(url, self.location.origin).href;
-      // Reuse an open tab if we have one — post a message so it can ack
-      // without a full reload.
       for (const client of clients) {
         if ('focus' in client) {
-          if (event.action === 'ack' && data.listId) {
-            client.postMessage({ type: 'ack-list', listId: data.listId });
+          if (event.action === 'ack' && ids) {
+            client.postMessage({ type: 'ack-list', listIds: data.listIds });
           }
           return client.focus();
         }

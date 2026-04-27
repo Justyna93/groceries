@@ -27,8 +27,8 @@ export type Subscription = {
 }
 
 export type Payload =
-  | { kind: 'shopping-day'; listId: string; listTitle: string }
-  | { kind: 'ack'; listId: string; listTitle: string; ackerName: string }
+  | { kind: 'shopping-day'; listIds: string[]; listTitles: string[] }
+  | { kind: 'ack'; listIds: string[]; listTitles: string[]; ackerName: string }
 
 // Returns the list of endpoints that the Push service rejected as gone (404/410)
 // so the caller can clean them out of the database.
