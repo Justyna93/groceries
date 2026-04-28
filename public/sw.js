@@ -1,5 +1,5 @@
 // Bump VERSION on deploy to force old caches to be evicted.
-const VERSION = 'v4';
+const VERSION = 'v5';
 const CACHE = `groceries-${VERSION}`;
 
 // Precached on install so the app shell boots offline on first repeat visit.
@@ -127,18 +127,30 @@ self.addEventListener('notificationclick', (event) => {
   const shouldAck = isShoppingDay && ids;
   const url = shouldAck ? `/?ack=${encodeURIComponent(ids)}` : '/';
 
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      const target = new URL(url, self.location.origin).href;
-      for (const client of clients) {
-        if ('focus' in client) {
-          if (shouldAck) {
-            client.postMessage({ type: 'ack-list', listIds: data.listIds });
+  event.waitUntil((async () => {
+    const target = new URL(url, self.location.origin).href;
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clients) {
+      if ('focus' in client) {
+        // For shopping-day acks, the URL must end up at `/?ack=<ids>` so the
+        // client-side hook fires the edge function. postMessage alone is
+        // unreliable on iOS PWAs (the message can be dropped while the page
+        // is being foregrounded), so we navigate the client when possible.
+        if (shouldAck) {
+          if (typeof client.navigate === 'function') {
+            try {
+              const navigated = await client.navigate(target);
+              return (navigated || client).focus();
+            } catch {
+              // navigate() can reject for cross-origin or unsupported cases —
+              // fall through to the postMessage fallback below.
+            }
           }
-          return client.focus();
+          client.postMessage({ type: 'ack-list', listIds: data.listIds });
         }
+        return client.focus();
       }
-      if (self.clients.openWindow) return self.clients.openWindow(target);
-    })
-  );
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(target);
+  })());
 });

@@ -61,7 +61,9 @@ export function ListBlock({
   const [expanded, setExpanded] = useState(false)
   const [newItem, setNewItem] = useState('')
   const [showNotes, setShowNotes] = useState(list.notes.trim() !== '')
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const dateRef = useRef<HTMLInputElement>(null)
 
   const addItem = () => {
     const t = newItem.trim()
@@ -80,29 +82,53 @@ export function ListBlock({
   const visibleItems = expanded ? list.items : list.items.slice(0, COLLAPSED_LIMIT)
 
   // Pretty date: "Today", "Tomorrow", "DD mmm", or "Set date" when not picked.
-  const prettyDate = (() => {
-    if (!list.date) return 'Set date'
+  const { prettyDate, isToday } = (() => {
+    if (!list.date) return { prettyDate: 'Set date', isToday: false }
     try {
       const d = new Date(list.date)
-      if (Number.isNaN(d.getTime())) return list.date
+      if (Number.isNaN(d.getTime())) return { prettyDate: list.date, isToday: false }
       const startOfDay = (x: Date) =>
         new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
       const target = startOfDay(d)
       const today = startOfDay(new Date())
       const dayMs = 24 * 60 * 60 * 1000
-      if (target === today) return 'Today'
-      if (target === today + dayMs) return 'Tomorrow'
-      return d.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-      })
+      if (target === today) return { prettyDate: 'Today', isToday: true }
+      if (target === today + dayMs) return { prettyDate: 'Tomorrow', isToday: false }
+      return {
+        prettyDate: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+        isToday: false,
+      }
     } catch {
-      return list.date
+      return { prettyDate: list.date ?? 'Set date', isToday: false }
     }
   })()
 
+  const openDatePicker = () => {
+    const input = dateRef.current
+    if (!input) return
+    // Sync the current date into the uncontrolled input just before opening.
+    // The input itself stays uncontrolled with defaultValue="" so Firefox's
+    // built-in "Reset" button (which resets to defaultValue) actually clears
+    // the date instead of reverting to the existing value.
+    input.value = list.date ?? ''
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker()
+        return
+      } catch {
+        // Some browsers throw if not user-activated; fall through to focus.
+      }
+    }
+    input.focus()
+    input.click()
+  }
+
   return (
-    <section className="card p-4 space-y-3">
+    <section
+      className={`card p-4 space-y-3 ${
+        isToday ? 'border-2 border-[#c2410c] dark:border-[#ea580c]' : ''
+      }`}
+    >
       {/* Header: title + date on same row */}
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
@@ -111,29 +137,47 @@ export function ListBlock({
             onChange={(t) => onUpdateList({ title: t })}
             onEditingChange={(editing) => onEditingList?.(editing)}
             placeholder="Untitled list"
-            className="font-semibold text-[17px] text-ink-900 dark:text-night-text truncate"
+            className={`font-semibold text-[17px] truncate ${
+              isToday
+                ? 'text-[#c2410c] dark:text-[#ea580c]'
+                : 'text-ink-900 dark:text-night-text'
+            }`}
           />
           {viewers.length > 0 && <AvatarStack members={viewers} />}
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
-          <span className="relative inline-flex items-center mr-0.5">
-            <span
-              className={`text-xs px-1 editable ${
-                list.date
-                  ? 'text-ink-500 dark:text-night-mute'
-                  : 'text-ink-400 italic'
-              }`}
+          <button
+            type="button"
+            onClick={openDatePicker}
+            className={`text-xs px-1 editable ${
+              list.date
+                ? 'text-ink-500 dark:text-night-mute'
+                : 'text-ink-400 italic'
+            }`}
+            aria-label="Set date"
+          >
+            {prettyDate}
+          </button>
+          {list.date && (
+            <button
+              type="button"
+              onClick={() => onUpdateList({ date: null })}
+              className="p-0.5 rounded-full text-ink-400 hover:text-ink-900 dark:hover:text-night-text hover:bg-surface-100 dark:hover:bg-night-edge"
+              aria-label="Clear date"
+              title="Clear date"
             >
-              {prettyDate}
-            </span>
-            <input
-              type="date"
-              value={list.date ?? ''}
-              onChange={(e) => onUpdateList({ date: e.target.value || null })}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer dark:[color-scheme:dark]"
-              aria-label="Date"
-            />
-          </span>
+              <XIcon className="w-3 h-3" />
+            </button>
+          )}
+          <input
+            ref={dateRef}
+            type="date"
+            defaultValue=""
+            onChange={(e) => onUpdateList({ date: e.target.value || null })}
+            className="sr-only"
+            aria-hidden="true"
+            tabIndex={-1}
+          />
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -162,29 +206,6 @@ export function ListBlock({
           </button>
         </div>
       </div>
-
-      {/* Photos */}
-      {list.photos.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
-          {list.photos.map((photo) => (
-            <div key={photo.id} className="relative shrink-0">
-              <img
-                src={photo.url}
-                alt=""
-                className="w-16 h-16 rounded-xl object-cover border border-surface-200 dark:border-night-edge bg-surface-100 dark:bg-night-edge"
-              />
-              <button
-                type="button"
-                onClick={() => onDeletePhoto(photo.id)}
-                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white dark:bg-night-card border border-surface-200 dark:border-night-edge grid place-items-center text-ink-500 dark:text-night-mute hover:text-ink-900 dark:hover:text-night-text shadow-card"
-                aria-label="Remove photo"
-              >
-                <XIcon className="w-3 h-3" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Bullets */}
       <ul className="space-y-1">
@@ -294,6 +315,60 @@ export function ListBlock({
           </div>
         )}
       </div>
+
+      {/* Photos (below Notes) */}
+      {list.photos.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
+          {list.photos.map((photo) => (
+            <div key={photo.id} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setLightboxUrl(photo.url)}
+                className="block focus:outline-none"
+                aria-label="View photo"
+              >
+                <img
+                  src={photo.url}
+                  alt=""
+                  className="w-16 h-16 rounded-xl object-cover border border-surface-200 dark:border-night-edge bg-surface-100 dark:bg-night-edge cursor-zoom-in"
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => onDeletePhoto(photo.id)}
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white dark:bg-night-card border border-surface-200 dark:border-night-edge grid place-items-center text-ink-500 dark:text-night-mute hover:text-ink-900 dark:hover:text-night-text shadow-card"
+                aria-label="Remove photo"
+              >
+                <XIcon className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {lightboxUrl && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setLightboxUrl(null)}
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-zoom-out"
+        >
+          <img
+            src={lightboxUrl}
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full rounded-lg shadow-card object-contain"
+          />
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/90 grid place-items-center text-ink-900 hover:bg-white"
+            aria-label="Close"
+          >
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </section>
   )
 }
