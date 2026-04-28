@@ -13,6 +13,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { sendToAll, type Subscription } from '../_shared/push.ts'
+import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -24,6 +25,9 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
 type Body = { source?: string }
 
 Deno.serve(async (req) => {
+  const pre = preflight(req)
+  if (pre) return pre
+
   let body: Body = {}
   try {
     body = await req.json()
@@ -86,6 +90,6 @@ Deno.serve(async (req) => {
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 }
