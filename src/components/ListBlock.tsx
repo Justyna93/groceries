@@ -125,7 +125,16 @@ export function ListBlock({
           {viewers.length > 0 && <AvatarStack members={viewers} />}
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
-          <span className="relative inline-flex items-center">
+          {/*
+            Pattern: label wraps the visible text + an `sr-only` date input.
+            On iOS Safari, tapping a <label> forwards the activation to the
+            contained <input type="date"> and opens the native picker — the
+            same as tapping the input directly. We can't overlay a real input
+            on top of the text because iOS WebKit applies an intrinsic
+            min-width to date inputs that overflows the parent and covers
+            the camera/trash icons next to it.
+          */}
+          <label className="inline-flex items-center cursor-pointer">
             <span
               className={`text-xs px-1 editable ${
                 list.date
@@ -139,10 +148,10 @@ export function ListBlock({
               type="date"
               value={list.date ?? ''}
               onChange={(e) => onUpdateList({ date: e.target.value || null })}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer dark:[color-scheme:dark]"
+              className="sr-only"
               aria-label="Set date"
             />
-          </span>
+          </label>
           {list.date && (
             <button
               type="button"
