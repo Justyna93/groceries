@@ -63,7 +63,6 @@ export function ListBlock({
   const [showNotes, setShowNotes] = useState(list.notes.trim() !== '')
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
-  const dateRef = useRef<HTMLInputElement>(null)
 
   const addItem = () => {
     const t = newItem.trim()
@@ -103,26 +102,6 @@ export function ListBlock({
     }
   })()
 
-  const openDatePicker = () => {
-    const input = dateRef.current
-    if (!input) return
-    // Sync the current date into the uncontrolled input just before opening.
-    // The input itself stays uncontrolled with defaultValue="" so Firefox's
-    // built-in "Reset" button (which resets to defaultValue) actually clears
-    // the date instead of reverting to the existing value.
-    input.value = list.date ?? ''
-    if (typeof input.showPicker === 'function') {
-      try {
-        input.showPicker()
-        return
-      } catch {
-        // Some browsers throw if not user-activated; fall through to focus.
-      }
-    }
-    input.focus()
-    input.click()
-  }
-
   return (
     <section
       className={`card p-4 space-y-3 ${
@@ -146,18 +125,24 @@ export function ListBlock({
           {viewers.length > 0 && <AvatarStack members={viewers} />}
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
-          <button
-            type="button"
-            onClick={openDatePicker}
-            className={`text-xs px-1 editable ${
-              list.date
-                ? 'text-ink-500 dark:text-night-mute'
-                : 'text-ink-400 italic'
-            }`}
-            aria-label="Set date"
-          >
-            {prettyDate}
-          </button>
+          <span className="relative inline-flex items-center">
+            <span
+              className={`text-xs px-1 editable ${
+                list.date
+                  ? 'text-ink-500 dark:text-night-mute'
+                  : 'text-ink-400 italic'
+              }`}
+            >
+              {prettyDate}
+            </span>
+            <input
+              type="date"
+              value={list.date ?? ''}
+              onChange={(e) => onUpdateList({ date: e.target.value || null })}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer dark:[color-scheme:dark]"
+              aria-label="Set date"
+            />
+          </span>
           {list.date && (
             <button
               type="button"
@@ -169,15 +154,6 @@ export function ListBlock({
               <XIcon className="w-3 h-3" />
             </button>
           )}
-          <input
-            ref={dateRef}
-            type="date"
-            defaultValue=""
-            onChange={(e) => onUpdateList({ date: e.target.value || null })}
-            className="sr-only"
-            aria-hidden="true"
-            tabIndex={-1}
-          />
           <button
             type="button"
             onClick={() => fileRef.current?.click()}

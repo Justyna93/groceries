@@ -1,5 +1,5 @@
 // Bump VERSION on deploy to force old caches to be evicted.
-const VERSION = 'v5';
+const VERSION = 'v6';
 const CACHE = `groceries-${VERSION}`;
 
 // Precached on install so the app shell boots offline on first repeat visit.
@@ -100,20 +100,25 @@ self.addEventListener('push', (event) => {
   const body = isAck ? `They saw ${titles}.` : `Open ${titles}.`;
   const today = todayIsoDate();
 
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: '/pwa-192x192.png',
-      badge: '/pwa-192x192.png',
-      tag: isAck ? `ack-${today}` : `shopping-${today}`,
-      // Re-alert when an existing notification is replaced (e.g. a 2nd list
-      // is added during the day). Without this, the browser would silently
-      // swap the body and the user wouldn't notice.
-      renotify: true,
-      data: payload,
-      actions: isAck ? [] : [{ action: 'ack', title: 'OK' }],
-    })
-  );
+  // iOS Safari has been observed to silently drop notifications when
+  // `actions` is an empty array — only set the field when we actually
+  // have an action to render.
+  const options = {
+    body,
+    icon: '/pwa-192x192.png',
+    badge: '/pwa-192x192.png',
+    tag: isAck ? `ack-${today}` : `shopping-${today}`,
+    // Re-alert when an existing notification is replaced (e.g. a 2nd list
+    // is added during the day). Without this, the browser would silently
+    // swap the body and the user wouldn't notice.
+    renotify: true,
+    data: payload,
+  };
+  if (!isAck) {
+    options.actions = [{ action: 'ack', title: 'OK' }];
+  }
+
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener('notificationclick', (event) => {
