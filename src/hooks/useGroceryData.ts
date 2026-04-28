@@ -230,19 +230,34 @@ export function useGroceryData(userId: string) {
   // --------------------------------------------------------------------------
   const lists: GroceryList[] = useMemo(
     () =>
-      listRows.map((l) => ({
-        id: l.id,
-        title: l.title,
-        date: l.date,
-        notes: l.notes,
-        items: itemRows
-          .filter((i) => i.list_id === l.id)
-          .sort((a, b) => a.position - b.position)
-          .map((i) => ({ id: i.id, text: i.text, done: i.done })),
-        photos: photoRows
-          .filter((p) => p.list_id === l.id)
-          .map((p) => ({ id: p.id, url: photoUrls[p.id] ?? '' })),
-      })),
+      listRows
+        // Sort by shopping date ascending — earliest first, undated lists last.
+        // Falls back to created_at desc within each bucket so the order is
+        // stable when multiple lists share a date (or none at all).
+        .slice()
+        .sort((a, b) => {
+          if (a.date && b.date) {
+            if (a.date !== b.date) return a.date < b.date ? -1 : 1
+          } else if (a.date) {
+            return -1
+          } else if (b.date) {
+            return 1
+          }
+          return (b.created_at ?? '').localeCompare(a.created_at ?? '')
+        })
+        .map((l) => ({
+          id: l.id,
+          title: l.title,
+          date: l.date,
+          notes: l.notes,
+          items: itemRows
+            .filter((i) => i.list_id === l.id)
+            .sort((a, b) => a.position - b.position)
+            .map((i) => ({ id: i.id, text: i.text, done: i.done })),
+          photos: photoRows
+            .filter((p) => p.list_id === l.id)
+            .map((p) => ({ id: p.id, url: photoUrls[p.id] ?? '' })),
+        })),
     [listRows, itemRows, photoRows, photoUrls],
   )
 
