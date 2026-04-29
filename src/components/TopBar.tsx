@@ -32,35 +32,21 @@ function formatLastSeen(iso?: string | null): string {
 type LoyaltyApp = {
   id: string
   name: string
-  ios: string
-  android: string
-  web: string
+  url: string
 }
 
 const LOYALTY_APPS: LoyaltyApp[] = [
   {
     id: 'partnerkaart',
     name: 'Partnerkaart',
-    ios: 'https://apps.apple.com/ee/app/partnerkaart/id1457992331',
-    android: 'https://play.google.com/store/apps/details?id=ee.coop.partnerkaart',
-    web: 'https://partnerkaart.ee/',
+    url: 'https://partnerkaart.ee/',
   },
   {
     id: 'maxima',
     name: 'Maxima Eesti',
-    ios: 'https://apps.apple.com/ee/app/maxima-eesti/id1454007394',
-    android: 'https://play.google.com/store/apps/details?id=ee.maxima.maximaee',
-    web: 'https://www.maxima.ee/',
+    url: 'https://www.maxima.ee/',
   },
 ]
-
-function pickAppUrl(app: LoyaltyApp): string {
-  if (typeof navigator === 'undefined') return app.web
-  const ua = navigator.userAgent || ''
-  if (/android/i.test(ua)) return app.android
-  if (/iPad|iPhone|iPod/.test(ua)) return app.ios
-  return app.web
-}
 
 export function TopBar({ members, currentEmail, currentUserId, onAddMember, onRemoveMember }: Props) {
   const [open, setOpen] = useState(false)
@@ -180,7 +166,7 @@ export function TopBar({ members, currentEmail, currentUserId, onAddMember, onRe
             {LOYALTY_APPS.map((app) => (
               <a
                 key={app.id}
-                href={pickAppUrl(app)}
+                href={app.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setAppsOpen(false)}
