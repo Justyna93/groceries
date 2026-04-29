@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { GroceryList, BulletItem, Member } from '../types'
 import { EditableText } from './EditableText'
-import { CameraIcon, NoteIcon, PlusIcon, TrashIcon, XIcon } from './Icons'
+import { CameraIcon, NoteIcon, PencilIcon, PlusIcon, TrashIcon, XIcon } from './Icons'
 
 type Props = {
   list: GroceryList
@@ -42,8 +42,6 @@ function AvatarStack({ members, size = 18 }: { members: Member[]; size?: number 
   )
 }
 
-const COLLAPSED_LIMIT = 5
-
 export function ListBlock({
   list,
   viewers = [],
@@ -58,11 +56,42 @@ export function ListBlock({
   onAddPhoto,
   onDeletePhoto,
 }: Props) {
-  const [expanded, setExpanded] = useState(false)
   const [newItem, setNewItem] = useState('')
   const [showNotes, setShowNotes] = useState(list.notes.trim() !== '')
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+  const editInputRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editingItemId && editInputRef.current) {
+      editInputRef.current.focus()
+      editInputRef.current.select()
+    }
+  }, [editingItemId])
+
+  const startEditItem = (item: BulletItem) => {
+    setEditDraft(item.text)
+    setEditingItemId(item.id)
+    onEditingItem?.(item.id)
+  }
+
+  const commitEditItem = () => {
+    if (editingItemId) {
+      const original = list.items.find((i) => i.id === editingItemId)
+      if (original && editDraft !== original.text) {
+        onUpdateItem(editingItemId, { text: editDraft })
+      }
+    }
+    setEditingItemId(null)
+    onEditingItem?.(null)
+  }
+
+  const cancelEditItem = () => {
+    setEditingItemId(null)
+    onEditingItem?.(null)
+  }
 
   const addItem = () => {
     const t = newItem.trim()
@@ -76,9 +105,6 @@ export function ListBlock({
     files.forEach((f) => onAddPhoto(f))
     e.target.value = ''
   }
-
-  const hiddenCount = Math.max(0, list.items.length - COLLAPSED_LIMIT)
-  const visibleItems = expanded ? list.items : list.items.slice(0, COLLAPSED_LIMIT)
 
   // Pretty date: "Today", "Tomorrow", "DD mmm", or "Set date" when not picked.
   const { prettyDate, isToday } = (() => {
@@ -193,47 +219,73 @@ export function ListBlock({
       </div>
 
       {/* Bullets */}
-      <ul className="space-y-1">
-        {visibleItems.map((item) => (
-          <li key={item.id} className="group flex items-start gap-2.5">
-            <button
-              type="button"
-              onClick={() => onUpdateItem(item.id, { done: !item.done })}
-              className={`mt-1.5 w-4 h-4 rounded-full border-[1.5px] shrink-0 transition ${
-                item.done
-                  ? 'bg-accent-500 border-accent-500'
-                  : 'border-ink-400 hover:border-ink-700 dark:hover:border-night-sub'
-              }`}
-              aria-label={item.done ? 'Mark as not done' : 'Mark as done'}
-            />
-            <EditableText
-              value={item.text}
-              onChange={(t) => onUpdateItem(item.id, { text: t })}
-              onEditingChange={(editing) => onEditingItem?.(editing ? item.id : null)}
-              placeholder="Item"
-              className={`flex-1 text-[15px] ${
-                item.done
-                  ? 'line-through text-ink-400'
-                  : 'text-ink-900 dark:text-night-text'
-              }`}
-            />
-            {editorsByItem[item.id]?.length ? (
-              <AvatarStack members={editorsByItem[item.id]} size={16} />
-            ) : null}
-            <button
-              type="button"
-              onClick={() => onDeleteItem(item.id)}
-              className="opacity-0 group-hover:opacity-100 text-ink-400 hover:text-ink-900 dark:hover:text-night-text p-1 rounded-md"
-              aria-label="Remove item"
-            >
-              <XIcon className="w-3.5 h-3.5" />
-            </button>
-          </li>
-        ))}
+      <ul className="space-y-3">
+        {list.items.map((item) => {
+          const isEditing = editingItemId === item.id
+          return (
+            <li key={item.id} className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onDeleteItem(item.id)}
+                className="p-1 rounded-md text-ink-400 hover:text-rose-600 dark:hover:text-rose-400 shrink-0"
+                aria-label="Remove item"
+                title="Remove item"
+              >
+                <XIcon className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => (isEditing ? commitEditItem() : startEditItem(item))}
+                className="p-1 rounded-md text-ink-400 hover:text-accent-600 dark:hover:text-accent-400 shrink-0"
+                aria-label={isEditing ? 'Save' : 'Edit item'}
+                title={isEditing ? 'Save' : 'Edit item'}
+              >
+                <PencilIcon className="w-4 h-4" />
+              </button>
+              {isEditing ? (
+                <input
+                  ref={editInputRef}
+                  value={editDraft}
+                  onChange={(e) => setEditDraft(e.target.value)}
+                  onBlur={commitEditItem}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      commitEditItem()
+                    } else if (e.key === 'Escape') {
+                      cancelEditItem()
+                    }
+                  }}
+                  placeholder="Item"
+                  className="flex-1 text-[17px] leading-relaxed bg-white dark:bg-night-edge border border-accent-500/40 rounded px-2 py-1 outline-none dark:text-night-text"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onUpdateItem(item.id, { done: !item.done })}
+                  className={`flex-1 text-left text-[17px] leading-relaxed py-1 cursor-pointer ${
+                    item.done
+                      ? 'line-through text-ink-400'
+                      : 'text-ink-900 dark:text-night-text'
+                  }`}
+                  aria-label={item.done ? 'Mark as not done' : 'Mark as done'}
+                >
+                  {item.text || <span className="text-ink-400">Item</span>}
+                </button>
+              )}
+              {editorsByItem[item.id]?.length ? (
+                <AvatarStack members={editorsByItem[item.id]} size={16} />
+              ) : null}
+            </li>
+          )
+        })}
 
         {/* New item input bullet */}
-        <li className="flex items-center gap-2.5 pt-0.5">
-          <span className="w-4 h-4 rounded-full border-[1.5px] border-dashed border-ink-400 shrink-0" />
+        <li className="flex items-center gap-2 pt-1">
+          <span className="w-6 shrink-0" aria-hidden />
+          <span className="w-6 shrink-0 flex items-center justify-center">
+            <PlusIcon className="w-4 h-4 text-ink-400" />
+          </span>
           <input
             value={newItem}
             onChange={(e) => setNewItem(e.target.value)}
@@ -246,7 +298,7 @@ export function ListBlock({
               }
             }}
             placeholder="Add item…"
-            className="flex-1 text-[15px] bg-transparent outline-none placeholder:text-ink-400 dark:text-night-text dark:placeholder:text-ink-500"
+            className="flex-1 text-[17px] leading-relaxed bg-transparent outline-none placeholder:text-ink-400 dark:text-night-text dark:placeholder:text-ink-500"
           />
           {newItem.trim() && (
             <button
@@ -260,17 +312,6 @@ export function ListBlock({
           )}
         </li>
       </ul>
-
-      {/* Show more */}
-      {list.items.length > COLLAPSED_LIMIT && (
-        <button
-          type="button"
-          onClick={() => setExpanded((e) => !e)}
-          className="text-xs font-medium text-accent-600 hover:text-accent-500"
-        >
-          {expanded ? 'Show less' : `Show more… (+${hiddenCount})`}
-        </button>
-      )}
 
       {/* Notes */}
       <div className="pt-2 border-t border-surface-200 dark:border-night-edge">

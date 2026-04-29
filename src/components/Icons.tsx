@@ -60,6 +60,13 @@ export const XIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 )
 
+export const PencilIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...props}>
+    <path d="M4 20h4l10-10-4-4L4 16v4Z" />
+    <path d="m13.5 6.5 4 4" />
+  </svg>
+)
+
 export const NoteIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg {...base} {...props}>
     <path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" />
