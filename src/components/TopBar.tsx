@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Member } from '../types'
-import { BellIcon, BellOffIcon, MoonIcon, PlusIcon, SunIcon, UsersIcon, XIcon } from './Icons'
+import { BellIcon, BellOffIcon, CardIcon, MoonIcon, PlusIcon, SunIcon, UsersIcon, XIcon } from './Icons'
 import { useDarkMode } from '../hooks/useDarkMode'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 
@@ -29,8 +29,42 @@ function formatLastSeen(iso?: string | null): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 }
 
+type LoyaltyApp = {
+  id: string
+  name: string
+  ios: string
+  android: string
+  web: string
+}
+
+const LOYALTY_APPS: LoyaltyApp[] = [
+  {
+    id: 'partnerkaart',
+    name: 'Partnerkaart',
+    ios: 'https://apps.apple.com/ee/app/partnerkaart/id1457992331',
+    android: 'https://play.google.com/store/apps/details?id=ee.coop.partnerkaart',
+    web: 'https://partnerkaart.ee/',
+  },
+  {
+    id: 'maxima',
+    name: 'Maxima Eesti',
+    ios: 'https://apps.apple.com/ee/app/maxima-eesti/id1454007394',
+    android: 'https://play.google.com/store/apps/details?id=ee.maxima.maximaee',
+    web: 'https://www.maxima.ee/',
+  },
+]
+
+function pickAppUrl(app: LoyaltyApp): string {
+  if (typeof navigator === 'undefined') return app.web
+  const ua = navigator.userAgent || ''
+  if (/android/i.test(ua)) return app.android
+  if (/iPad|iPhone|iPod/.test(ua)) return app.ios
+  return app.web
+}
+
 export function TopBar({ members, currentEmail, currentUserId, onAddMember, onRemoveMember }: Props) {
   const [open, setOpen] = useState(false)
+  const [appsOpen, setAppsOpen] = useState(false)
   const [newEmail, setNewEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const { isDark, toggle: toggleTheme } = useDarkMode()
@@ -95,6 +129,20 @@ export function TopBar({ members, currentEmail, currentUserId, onAddMember, onRe
 
           <button
             type="button"
+            onClick={() => {
+              setAppsOpen((o) => !o)
+              setOpen(false)
+            }}
+            className="p-1.5 rounded-full bg-white dark:bg-night-card border border-surface-200 dark:border-night-edge text-ink-700 dark:text-night-sub hover:bg-surface-100 dark:hover:bg-surface-700 transition"
+            aria-expanded={appsOpen}
+            aria-label="Loyalty apps"
+            title="Loyalty cards"
+          >
+            <CardIcon className="w-[18px] h-[18px]" />
+          </button>
+
+          <button
+            type="button"
             onClick={toggleTheme}
             className="p-1.5 rounded-full bg-white dark:bg-night-card border border-surface-200 dark:border-night-edge text-ink-700 dark:text-night-sub hover:bg-surface-100 dark:hover:bg-surface-700 transition"
             aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -109,7 +157,10 @@ export function TopBar({ members, currentEmail, currentUserId, onAddMember, onRe
 
           <button
             type="button"
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => {
+              setOpen((o) => !o)
+              setAppsOpen(false)
+            }}
             className="relative flex items-center gap-1.5 rounded-full bg-white dark:bg-night-card border border-surface-200 dark:border-night-edge px-2.5 py-1.5 text-ink-700 dark:text-night-sub hover:bg-surface-100 dark:hover:bg-surface-700 transition"
             aria-expanded={open}
             aria-label="Members"
@@ -122,6 +173,32 @@ export function TopBar({ members, currentEmail, currentUserId, onAddMember, onRe
           </button>
         </div>
       </div>
+
+      {appsOpen && (
+        <div className="px-4 pb-3">
+          <div className="card p-2 space-y-1">
+            {LOYALTY_APPS.map((app) => (
+              <a
+                key={app.id}
+                href={pickAppUrl(app)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setAppsOpen(false)}
+                className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-700"
+              >
+                <div className="w-8 h-8 rounded-full bg-surface-100 dark:bg-night-edge grid place-items-center text-ink-700 dark:text-night-sub">
+                  <CardIcon className="w-[18px] h-[18px]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-ink-900 dark:text-night-text truncate">
+                    {app.name}
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className="px-4 pb-3">
