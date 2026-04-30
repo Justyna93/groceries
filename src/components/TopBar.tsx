@@ -32,21 +32,59 @@ function formatLastSeen(iso?: string | null): string {
 type LoyaltyApp = {
   id: string
   name: string
-  url: string
+  web: string
+  androidPackage?: string
+  iosScheme?: string
 }
 
 const LOYALTY_APPS: LoyaltyApp[] = [
   {
     id: 'partnerkaart',
     name: 'Partnerkaart',
-    url: 'https://partnerkaart.ee/',
+    web: 'https://partnerkaart.ee/',
+    androidPackage: 'ee.tkmg.partnerapp',
+    iosScheme: 'ee.tkmg.partnerapp://',
   },
   {
     id: 'maxima',
     name: 'Maxima Eesti',
-    url: 'https://www.maxima.ee/',
+    web: 'https://www.maxima.ee/',
+    androidPackage: 'ee.maxima',
   },
 ]
+
+function openLoyaltyApp(app: LoyaltyApp) {
+  if (typeof navigator === 'undefined') {
+    window.open(app.web, '_blank', 'noopener,noreferrer')
+    return
+  }
+  const ua = navigator.userAgent || ''
+  const isAndroid = /android/i.test(ua)
+  const isIos = /iPad|iPhone|iPod/.test(ua)
+
+  if (isAndroid && app.androidPackage) {
+    const fallback = encodeURIComponent(app.web)
+    window.location.href = `intent://#Intent;package=${app.androidPackage};S.browser_fallback_url=${fallback};end`
+    return
+  }
+
+  if (isIos && app.iosScheme) {
+    const fallbackTimer = window.setTimeout(() => {
+      window.location.href = app.web
+    }, 1500)
+    const onHidden = () => {
+      if (document.hidden) {
+        window.clearTimeout(fallbackTimer)
+        document.removeEventListener('visibilitychange', onHidden)
+      }
+    }
+    document.addEventListener('visibilitychange', onHidden)
+    window.location.href = app.iosScheme
+    return
+  }
+
+  window.open(app.web, '_blank', 'noopener,noreferrer')
+}
 
 export function TopBar({ members, currentEmail, currentUserId, onAddMember, onRemoveMember }: Props) {
   const [open, setOpen] = useState(false)
@@ -164,13 +202,14 @@ export function TopBar({ members, currentEmail, currentUserId, onAddMember, onRe
         <div className="px-4 pb-3">
           <div className="card p-2 space-y-1">
             {LOYALTY_APPS.map((app) => (
-              <a
+              <button
                 key={app.id}
-                href={app.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setAppsOpen(false)}
-                className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-700"
+                type="button"
+                onClick={() => {
+                  setAppsOpen(false)
+                  openLoyaltyApp(app)
+                }}
+                className="w-full flex items-center gap-3 px-2 py-2 rounded-lg text-left hover:bg-surface-100 dark:hover:bg-surface-700"
               >
                 <div className="w-8 h-8 rounded-full bg-surface-100 dark:bg-night-edge grid place-items-center text-ink-700 dark:text-night-sub">
                   <CardIcon className="w-[18px] h-[18px]" />
@@ -180,7 +219,7 @@ export function TopBar({ members, currentEmail, currentUserId, onAddMember, onRe
                     {app.name}
                   </div>
                 </div>
-              </a>
+              </button>
             ))}
           </div>
         </div>
