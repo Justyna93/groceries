@@ -59,6 +59,27 @@ export function ListBlock({
   const [newItem, setNewItem] = useState('')
   const [showNotes, setShowNotes] = useState(list.notes.trim() !== '')
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+
+  // Push a history entry while the lightbox is open so the Android Back gesture
+  // closes the photo instead of leaving the app. We open the lightbox by pushing
+  // state, and close it by going back (or by intercepting popstate when the user
+  // hits Back themselves).
+  const openLightbox = (url: string) => {
+    setLightboxUrl(url)
+    window.history.pushState({ lightbox: true }, '')
+  }
+  const closeLightbox = () => {
+    setLightboxUrl(null)
+    if (window.history.state?.lightbox) {
+      window.history.back()
+    }
+  }
+  useEffect(() => {
+    if (!lightboxUrl) return
+    const onPop = () => setLightboxUrl(null)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [lightboxUrl])
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const editInputRef = useRef<HTMLInputElement>(null)
@@ -223,7 +244,12 @@ export function ListBlock({
         {list.items.map((item) => {
           const isEditing = editingItemId === item.id
           return (
-            <li key={item.id} className="flex items-center gap-2">
+            <li
+              key={item.id}
+              className={`flex items-center gap-2 rounded-md px-1 -mx-1 transition-colors ${
+                item.done ? 'bg-surface-100 dark:bg-night-edge/60' : ''
+              }`}
+            >
               <button
                 type="button"
                 onClick={() => onDeleteItem(item.id)}
@@ -349,7 +375,7 @@ export function ListBlock({
             <div key={photo.id} className="relative shrink-0">
               <button
                 type="button"
-                onClick={() => setLightboxUrl(photo.url)}
+                onClick={() => openLightbox(photo.url)}
                 className="block focus:outline-none"
                 aria-label="View photo"
               >
@@ -376,18 +402,20 @@ export function ListBlock({
         <div
           role="dialog"
           aria-modal="true"
-          onClick={() => setLightboxUrl(null)}
+          onClick={closeLightbox}
           className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-zoom-out"
         >
           <img
             src={lightboxUrl}
             alt=""
-            onClick={(e) => e.stopPropagation()}
-            className="max-w-full max-h-full rounded-lg shadow-card object-contain"
+            className="max-w-full max-h-full rounded-lg shadow-card object-contain cursor-zoom-out"
           />
           <button
             type="button"
-            onClick={() => setLightboxUrl(null)}
+            onClick={(e) => {
+              e.stopPropagation()
+              closeLightbox()
+            }}
             className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/90 grid place-items-center text-ink-900 hover:bg-white"
             aria-label="Close"
           >
