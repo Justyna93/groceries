@@ -64,7 +64,14 @@ function openLoyaltyApp(app: LoyaltyApp) {
 
   if (isAndroid && app.androidPackage) {
     const fallback = encodeURIComponent(app.web)
-    window.location.href = `intent://#Intent;package=${app.androidPackage};S.browser_fallback_url=${fallback};end`
+    // Explicit MAIN + LAUNCHER tells Android to resolve the package's launcher
+    // activity. Without an action some apps (e.g. Maxima Eesti) don't match the
+    // bare-intent and Chrome silently falls back to the website.
+    window.location.href =
+      `intent:#Intent;action=android.intent.action.MAIN;` +
+      `category=android.intent.category.LAUNCHER;` +
+      `package=${app.androidPackage};` +
+      `S.browser_fallback_url=${fallback};end`
     return
   }
 

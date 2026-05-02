@@ -252,7 +252,13 @@ export function useGroceryData(userId: string) {
           notes: l.notes,
           items: itemRows
             .filter((i) => i.list_id === l.id)
-            .sort((a, b) => a.position - b.position)
+            // Done items pile at the top, most-recently-crossed first.
+            // updateItem assigns position=min-1 on done, position=max+1 on undone,
+            // so a single asc sort keeps done above undone.
+            .sort((a, b) => {
+              if (a.done !== b.done) return a.done ? -1 : 1
+              return a.position - b.position
+            })
             .map((i) => ({ id: i.id, text: i.text, done: i.done })),
           photos: photoRows
             .filter((p) => p.list_id === l.id)
@@ -362,9 +368,23 @@ export function useGroceryData(userId: string) {
 
   const updateItem = useCallback(
     async (id: string, patch: { text?: string; done?: boolean }) => {
-      await supabase.from('items').update(patch).eq('id', id)
+      const next: { text?: string; done?: boolean; position?: number } = { ...patch }
+      if (patch.done !== undefined) {
+        const current = itemRows.find((i) => i.id === id)
+        if (current) {
+          const siblings = itemRows.filter((i) => i.list_id === current.list_id)
+          if (patch.done) {
+            const minPos = siblings.reduce((acc, i) => Math.min(acc, i.position), 0)
+            next.position = minPos - 1
+          } else {
+            const maxPos = siblings.reduce((acc, i) => Math.max(acc, i.position), -1)
+            next.position = maxPos + 1
+          }
+        }
+      }
+      await supabase.from('items').update(next).eq('id', id)
     },
-    [],
+    [itemRows],
   )
 
   const deleteItem = useCallback(async (id: string) => {
