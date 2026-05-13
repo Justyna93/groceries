@@ -47,6 +47,9 @@ export function useGroceryData(userId: string) {
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
   const [presenceState, setPresenceState] = useState<Map<string, PresenceMeta>>(new Map())
   const presenceChannelRef = useRef<RealtimeChannel | null>(null)
+  // Pending push timer per list, so a quickly-corrected date pick (e.g. iOS
+  // committing today before the user spins to another day) cancels the push.
+  const pendingPushRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   // --------------------------------------------------------------------------
   // Initial load
@@ -66,6 +69,17 @@ export function useGroceryData(userId: string) {
       if (i.data) setItemRows(i.data)
       if (p.data) setPhotoRows(p.data)
       setLoading(false)
+
+      // Auto-clear dates that fell into the past so stale lists don't keep
+      // showing yesterday's date. Realtime will reflect the update back.
+      const today = new Date().toISOString().slice(0, 10)
+      const stale = (l.data ?? []).filter((row) => row.date && row.date < today)
+      if (stale.length) {
+        await supabase
+          .from('lists')
+          .update({ date: null })
+          .in('id', stale.map((r) => r.id))
+      }
     })()
     return () => {
       cancelled = true
@@ -332,11 +346,23 @@ export function useGroceryData(userId: string) {
       // edits to the title or notes on a today-list don't re-trigger it. The
       // edge function dedupes via shopping_day_notifications.
       if (patch.date !== undefined) {
+        // Cancel any pending push for this list — handles iOS Safari opening
+        // the date picker and committing today's date before the user picks
+        // a different day.
+        const pending = pendingPushRef.current.get(id)
+        if (pending) {
+          clearTimeout(pending)
+          pendingPushRef.current.delete(id)
+        }
         const today = new Date().toISOString().slice(0, 10)
         if (patch.date === today && previous?.date !== today) {
-          void supabase.functions.invoke('send-shopping-reminders', {
-            body: { source: 'app' },
-          })
+          const timer = setTimeout(() => {
+            pendingPushRef.current.delete(id)
+            void supabase.functions.invoke('send-shopping-reminders', {
+              body: { source: 'app' },
+            })
+          }, 5000)
+          pendingPushRef.current.set(id, timer)
         }
       }
     },
