@@ -17,3 +17,16 @@ export const supabase = createClient<Database>(url, anonKey, {
     detectSessionInUrl: true,
   },
 })
+
+// Keep the Realtime socket authenticated as the signed-in user.
+//
+// supabase-js forwards the access token to Realtime only on `SIGNED_IN` and
+// `TOKEN_REFRESHED`. Reopening the app with a still-valid persisted session
+// emits `INITIAL_SESSION` instead, so the socket keeps running on the bare
+// anon key. Every table here is RLS-protected behind `is_member()`, which is
+// false for anon — so `postgres_changes` subscriptions join happily and then
+// deliver *nothing*, until the token happens to refresh minutes later. That
+// is what made live updates look broken-then-fixed at random.
+supabase.auth.onAuthStateChange((_event, session) => {
+  void supabase.realtime.setAuth(session?.access_token ?? null)
+})
