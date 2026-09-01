@@ -4,9 +4,10 @@
 // the body to "Open Pharmacy, Bio." instead of stacking a second alert.
 //
 // Triggers:
-//   1. pg_cron at 7am + 8am UTC (covers 9am Warsaw across DST). Skipped if
-//      we already fired one today.
-//   2. The web app, right after creating a list dated today. Body is ignored;
+//   1. pg_cron at 07:00 + 08:00 UTC. pg_cron schedules in UTC, and 9am Warsaw
+//      is one or the other depending on DST, so both fire and the run that is
+//      not actually the 9 o'clock hour locally bails out (REMINDER_HOUR).
+//   2. The web app, 5s after a list's date is set to today. Body is ignored;
 //      we always re-aggregate from the DB.
 //
 // Auth: service-role (cron via Vault; web app via the user's JWT).
@@ -14,6 +15,10 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { sendToAll, type Subscription } from '../_shared/push.ts'
 import { corsHeaders, preflight } from '../_shared/cors.ts'
+import { TIMEZONE, localDate, localHour } from '../_shared/time.ts'
+
+// Wall-clock hour in TIMEZONE at which the daily reminder goes out.
+const REMINDER_HOUR = 9
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -35,8 +40,16 @@ Deno.serve(async (req) => {
     // pg_cron sends a tiny body; tolerate missing JSON.
   }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDate()
   const fromCron = body.source === 'cron'
+
+  // Only one of the two UTC cron slots is 9am in Warsaw on any given date —
+  // 07:00 UTC under CEST, 08:00 UTC under CET. The other one is an hour early
+  // or an hour late, so it is not this hour's job. App-triggered calls are a
+  // direct response to the user setting a date and are never time-gated.
+  if (fromCron && localHour() !== REMINDER_HOUR) {
+    return json({ skipped: `not ${REMINDER_HOUR}:00 in ${TIMEZONE}` })
+  }
 
   const { data: lists, error: listsErr } = await admin
     .from('lists')
@@ -45,7 +58,8 @@ Deno.serve(async (req) => {
   if (listsErr) return json({ error: listsErr.message }, 500)
   if (!lists?.length) return json({ skipped: 'no lists today' })
 
-  // Cron must not double-fire (7am + 8am UTC); the web-app trigger always
+  // Belt-and-braces behind the hour guard: a retry or a manual re-run inside
+  // the 9 o'clock hour must not alert twice. The web-app trigger always
   // proceeds so a freshly-added list updates the in-tray notification.
   if (fromCron) {
     const { count } = await admin

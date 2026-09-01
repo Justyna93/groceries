@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Member } from '../types'
 import { BellIcon, BellOffIcon, CardIcon, MoonIcon, PlusIcon, SunIcon, UsersIcon, XIcon } from './Icons'
 import { useDarkMode } from '../hooks/useDarkMode'
+import { isProtectedMemberEmail } from '../lib/constants'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 
 type Props = {
@@ -263,7 +264,11 @@ export function TopBar({ members, currentEmail, currentUserId, onAddMember, onRe
                       ? 'viewing'
                       : formatLastSeen(m.lastSeenAt)}
                 </span>
-                {m.email.toLowerCase() !== (currentEmail ?? '').toLowerCase() && (
+                {/* No remove button for yourself, and none for a protected member —
+                    deleting their row would lock them out of every table, since
+                    all RLS here goes through is_member(). */}
+                {m.email.toLowerCase() !== (currentEmail ?? '').toLowerCase() &&
+                  !isProtectedMemberEmail(m.email) && (
                   <button
                     type="button"
                     onClick={() => onRemoveMember(m.id)}

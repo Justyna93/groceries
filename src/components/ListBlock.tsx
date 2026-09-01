@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { GroceryList, BulletItem, Member } from '../types'
 import { EditableText } from './EditableText'
 import { CameraIcon, NoteIcon, PencilIcon, PlusIcon, TrashIcon, XIcon } from './Icons'
+import { todayIso } from '../lib/dates'
 
 type Props = {
   list: GroceryList
@@ -191,10 +192,16 @@ export function ListBlock({
             >
               {prettyDate}
             </span>
+            {/*
+              The min attribute keeps the picker off past dates: a past date
+              is not a state a list can be in (useGroceryData clears it back
+              to null), so offering one would just make the pick vanish.
+            */}
             <input
               type="date"
               value={list.date ?? ''}
               onChange={(e) => onUpdateList({ date: e.target.value || null })}
+              min={todayIso()}
               className="sr-only"
               aria-label="Set date"
             />

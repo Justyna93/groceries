@@ -4,7 +4,7 @@ Two functions back the "shopping day" + "acknowledged" flow:
 
 | Function | Triggered by | What it does |
 | --- | --- | --- |
-| `send-shopping-reminders` | `pg_cron` daily at 07:00 + 08:00 UTC; web app on insert when `list.date = today` | Sends 🧺 *Today is a shopping day in `<List>`* to every saved subscription. Idempotent per `(list_id, today)`. |
+| `send-shopping-reminders` | `pg_cron` daily at 07:00 + 08:00 UTC (only the slot that is 09:00 Europe/Warsaw proceeds — the other returns `skipped`); web app 5s after a list's date is set to today | Sends 🧺 *Today is a shopping day in `<List>`* to every saved subscription. Idempotent per `(list_id, today)`. |
 | `ack-shopping-day` | Web app, when the user clicks **OK** on a shopping-day notification | Sends 🧺 *`<Name>` acknowledged …* to the **other** user's subscriptions. |
 
 ## One-time setup
@@ -58,7 +58,7 @@ supabase functions invoke send-shopping-reminders \
   --body '{}'
 ```
 
-To force-fire for a specific list (skips the `date = today` filter):
-```bash
-… --body '{"listId":"<uuid>"}'
-```
+An empty body is treated as an app-triggered call: it skips both the 09:00
+hour guard and the once-a-day dedupe, and alerts for every list dated today
+in Europe/Warsaw. Pass `'{"source":"cron"}'` to exercise the guarded path
+instead — outside the 9 o'clock hour that returns `skipped` and sends nothing.
