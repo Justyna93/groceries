@@ -117,6 +117,10 @@ export type Database = {
         Args: Record<string, never>
         Returns: boolean
       }
+      claim_pending_membership: {
+        Args: Record<string, never>
+        Returns: undefined
+      }
     }
     Enums: Record<string, never>
   }

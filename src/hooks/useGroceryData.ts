@@ -117,9 +117,13 @@ export function useGroceryData(userId: string) {
     if (p.data) setPhotoRows(p.data)
   }, [])
 
-  // Initial load.
+  // Initial load. Self-heal first: if this login reused an auth account that
+  // predates the current invite (e.g. a re-invite after removal), the
+  // members row may still be pending with no profile_id attached — RLS would
+  // otherwise hide everything with no way back in. See migration 0005.
   useEffect(() => {
     ;(async () => {
+      await supabase.rpc('claim_pending_membership')
       await refresh(true)
       if (mountedRef.current) setLoading(false)
     })()
